@@ -1,0 +1,17 @@
+# Backend
+backend/target/
+backend/.idea/
+backend/*.iml
+
+# Frontend
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+frontend/.data/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store

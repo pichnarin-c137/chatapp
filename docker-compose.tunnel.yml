@@ -1,0 +1,9 @@
+services:
+  backend:
+    environment:
+      APP_CORS_ALLOWED_ORIGINS: ${FRONT_PUBLIC_URL:-http://localhost:3000},http://localhost:3000
+
+  frontend:
+    environment:
+      NUXT_PUBLIC_API_BASE: ${API_PUBLIC_URL:-http://localhost:8081}
+      NUXT_PUBLIC_WS_BASE: ${WS_PUBLIC_URL:-ws://localhost:8081/ws}
