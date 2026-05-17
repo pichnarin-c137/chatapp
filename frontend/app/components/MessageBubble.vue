@@ -2,7 +2,7 @@
 import { formatTime } from '~/utils/time'
 
 interface BubbleMessage {
-  content: string
+  body: string | null
   sentAt: string
   senderUsername: string
 }
@@ -34,7 +34,7 @@ const time = computed(() => formatTime(props.message.sentAt, props.timezone))
             : 'bg-slate-800 text-slate-100 rounded-bl-md',
         ]"
       >
-        {{ message.content }}
+        {{ message.body }}
       </div>
       <span class="text-[10px] text-slate-500 px-1 font-mono">{{ time }}</span>
     </div>

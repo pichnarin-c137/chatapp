@@ -1,6 +1,6 @@
 import { Client, type IFrame } from '@stomp/stompjs'
 import { useAuthStore } from '~/stores/auth'
-import { useChatStore } from '~/stores/chat'
+import { useConversationStore } from '~/stores/conversation'
 
 let client: Client | null = null
 const subscriptions = new Map<string, () => void>()
@@ -9,7 +9,7 @@ const pendingSubscriptions: Array<() => void> = []
 export function useStomp() {
   const config = useRuntimeConfig()
   const auth = useAuthStore()
-  const chat = useChatStore()
+  const chat = useConversationStore()
 
   function connect() {
     if (!import.meta.client) return

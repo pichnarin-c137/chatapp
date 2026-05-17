@@ -27,7 +27,15 @@ public class AdminUserController {
         return "admin/users/list";
     }
 
-    /** HTMX: returns just the <tbody> for search-as-you-type. */
+    @GetMapping("/{id}")
+    public String detail(@PathVariable UUID id, Model model) {
+        User u = service.findById(id);
+        model.addAttribute("pageTitle", "User: " + u.getUsername());
+        model.addAttribute("activeNav", "users");
+        model.addAttribute("u", u);
+        return "admin/users/detail";
+    }
+
     @GetMapping("/rows")
     public String rows(@RequestParam(value = "q", required = false) String q,
                        @RequestParam(value = "page", defaultValue = "0") int page,
@@ -36,17 +44,17 @@ public class AdminUserController {
         return "admin/users/list :: tableBody";
     }
 
-    @PostMapping("/{id}/toggle-role")
-    public String toggleRole(@PathVariable UUID id, Authentication auth, Model model) {
-        User u = service.toggleRole(id, auth.getName());
+    @PostMapping("/{id}/toggle-status")
+    public String toggleStatus(@PathVariable UUID id, Authentication auth, Model model) {
+        User u = service.toggleStatus(id, auth);
         model.addAttribute("u", u);
         return "admin/users/_row :: userRow(u=${u})";
     }
 
     @DeleteMapping("/{id}")
     @ResponseBody
-    public String delete(@PathVariable UUID id, Authentication auth) {
-        service.delete(id, auth.getName());
+    public String softDelete(@PathVariable UUID id, Authentication auth) {
+        service.softDelete(id, auth);
         return "";
     }
 

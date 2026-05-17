@@ -1,9 +1,9 @@
 <script setup lang="ts">
 interface PaneMessage {
   id: string
-  senderId: string
+  senderId: string | null
   senderUsername: string
-  content: string
+  body: string | null
   sentAt: string
 }
 

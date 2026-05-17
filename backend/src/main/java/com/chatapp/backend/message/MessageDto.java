@@ -5,23 +5,25 @@ import java.util.UUID;
 
 public record MessageDto(
         UUID id,
-        UUID roomId,
+        UUID conversationId,
         UUID senderId,
         String senderUsername,
-        String content,
-        String type,
-        UUID replyTo,
+        MessageType type,
+        String body,
+        UUID replyToId,
+        Instant editedAt,
         Instant sentAt
 ) {
     public static MessageDto from(Message m, String senderUsername) {
         return new MessageDto(
                 m.getId(),
-                m.getRoomId(),
-                m.getSenderId(),
+                m.getConversation().getId(),
+                m.getSender() == null ? null : m.getSender().getId(),
                 senderUsername,
-                m.getContent(),
-                m.getType().name(),
-                m.getReplyTo(),
+                m.getType(),
+                m.getBody(),
+                m.getReplyToId(),
+                m.getEditedAt(),
                 m.getSentAt()
         );
     }

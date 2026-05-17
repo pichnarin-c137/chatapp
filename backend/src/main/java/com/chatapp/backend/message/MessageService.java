@@ -1,18 +1,23 @@
 package com.chatapp.backend.message;
 
+import com.chatapp.backend.common.audit.CustomUserDetails;
+import com.chatapp.backend.conversation.Conversation;
+import com.chatapp.backend.conversation.ConversationRepository;
+import com.chatapp.backend.conversation.MembershipService;
 import com.chatapp.backend.user.User;
 import com.chatapp.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.time.Instant;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,29 +25,83 @@ import java.util.stream.Collectors;
 public class MessageService {
 
     private final MessageRepository messages;
+    private final ConversationRepository conversations;
+    private final MembershipService memberships;
     private final UserRepository users;
 
     @Transactional
-    public MessageDto save(UUID roomId, UUID senderId, String content, UUID replyTo, String senderUsername) {
+    public MessageDto send(UUID conversationId, UUID senderId, String body, UUID replyToId) {
+        if (body == null || body.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message body cannot be empty");
+        }
+        Conversation c = conversations.findById(conversationId)
+                .filter(cv -> cv.getDeletedAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found"));
+        // CHANNELs are open: any authenticated user can post. DM/GROUP require membership.
+        if (c.getType() != com.chatapp.backend.conversation.ConversationType.CHANNEL
+                && !memberships.isActiveMember(conversationId, senderId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of this conversation");
+        }
+        User sender = users.findById(senderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sender not found"));
+
         Message msg = Message.builder()
-                .roomId(roomId)
-                .senderId(senderId)
-                .content(content)
-                .type(Message.Type.TEXT)
-                .replyTo(replyTo)
+                .conversation(c)
+                .sender(sender)
+                .type(MessageType.TEXT)
+                .body(body)
+                .replyToId(replyToId)
                 .build();
         Message saved = messages.save(msg);
-        return MessageDto.from(saved, senderUsername);
+        c.setLastMessageAt(saved.getSentAt());
+        return MessageDto.from(saved, sender.getUsername());
     }
 
     @Transactional(readOnly = true)
-    public List<MessageDto> history(UUID roomId, int page, int size) {
-        Page<Message> result = messages.findByRoomIdOrderBySentAtDesc(roomId, PageRequest.of(page, size));
-        Set<UUID> senderIds = result.stream().map(Message::getSenderId).collect(Collectors.toSet());
-        Map<UUID, String> usernames = new HashMap<>();
-        users.findAllById(senderIds).forEach(u -> usernames.put(u.getId(), u.getUsername()));
+    public List<MessageDto> history(UUID conversationId, int page, int size) {
+        Page<Message> result = messages.history(conversationId, PageRequest.of(page, size));
+        Set<UUID> senderIds = result.stream()
+                .map(m -> m.getSender() == null ? null : m.getSender().getId())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> usernames = users.findAllById(senderIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getUsername));
         return result.stream()
-                .map(m -> MessageDto.from(m, usernames.getOrDefault(m.getSenderId(), "unknown")))
+                .map(m -> MessageDto.from(m,
+                        m.getSender() == null
+                                ? "system"
+                                : usernames.getOrDefault(m.getSender().getId(), "unknown")))
                 .toList();
+    }
+
+    @Transactional
+    public void softDelete(UUID messageId) {
+        Message m = messages.findById(messageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Message not found"));
+        m.markDeleted(currentUserId());
+    }
+
+    @Transactional
+    public MessageDto edit(UUID messageId, UUID editorId, String newBody) {
+        if (newBody == null || newBody.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Body cannot be empty");
+        }
+        Message m = messages.findById(messageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Message not found"));
+        if (m.getSender() == null || !m.getSender().getId().equals(editorId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the sender can edit");
+        }
+        m.setBody(newBody);
+        m.setEditedAt(Instant.now());
+        return MessageDto.from(m, m.getSender().getUsername());
+    }
+
+    private UUID currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        Object p = auth.getPrincipal();
+        if (p instanceof User u) return u.getId();
+        if (p instanceof CustomUserDetails cud) return cud.getId();
+        return null;
     }
 }

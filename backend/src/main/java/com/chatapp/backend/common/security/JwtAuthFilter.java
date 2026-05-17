@@ -1,5 +1,6 @@
 package com.chatapp.backend.common.security;
 
+import com.chatapp.backend.rbac.UserRoleRepository;
 import com.chatapp.backend.user.User;
 import com.chatapp.backend.user.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -25,6 +26,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -37,13 +39,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 UUID userId = jwtService.parseUserId(token);
                 if (SecurityContextHolder.getContext().getAuthentication() == null) {
                     Optional<User> userOpt = userRepository.findById(userId);
-                    if (userOpt.isPresent()) {
+                    if (userOpt.isPresent() && userOpt.get().getDeletedAt() == null) {
                         User u = userOpt.get();
-                        var auth = new UsernamePasswordAuthenticationToken(
-                                u,
-                                null,
-                                List.of(new SimpleGrantedAuthority("ROLE_" + u.getRole().name()))
-                        );
+                        List<SimpleGrantedAuthority> authorities = userRoleRepository
+                                .findPermissionCodesByUserId(u.getId()).stream()
+                                .map(SimpleGrantedAuthority::new)
+                                .toList();
+                        var auth = new UsernamePasswordAuthenticationToken(u, null, authorities);
                         auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(auth);
                     }

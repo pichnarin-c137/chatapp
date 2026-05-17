@@ -2,6 +2,7 @@ package com.chatapp.backend.admin.moderation;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -28,15 +29,15 @@ public class AdminModerationController {
 
     @DeleteMapping("/messages/{id}")
     @ResponseBody
-    public String deleteMessage(@PathVariable UUID id) {
-        service.deleteMessage(id);
+    public String deleteMessage(@PathVariable UUID id, Authentication auth) {
+        service.deleteMessage(id, auth);
         return "";
     }
 
     @PostMapping("/reports/{id}/resolve")
     @ResponseBody
-    public String resolve(@PathVariable UUID id) {
-        service.resolveReport(id);
+    public String resolve(@PathVariable UUID id, Authentication auth) {
+        service.resolveReport(id, auth);
         return "";
     }
 }

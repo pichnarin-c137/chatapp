@@ -20,13 +20,14 @@ import java.util.UUID;
 public class UserController {
 
     private final UserRepository users;
+    private final UserProfileRepository profiles;
 
     @GetMapping("/search")
     public List<UserDto> search(@RequestParam("q") String q,
                                 @AuthenticationPrincipal User current) {
         String trimmed = q == null ? "" : q.trim();
         if (trimmed.startsWith("@")) trimmed = trimmed.substring(1);
-        if (trimmed.length() < 1) return List.of();
+        if (trimmed.isEmpty()) return List.of();
         return users.searchByUsernamePrefix(trimmed, current.getId(), PageRequest.of(0, 10))
                 .stream()
                 .map(UserDto::from)
@@ -35,8 +36,10 @@ public class UserController {
 
     @GetMapping("/{id}")
     public UserDto get(@PathVariable UUID id) {
-        return users.findById(id)
-                .map(UserDto::from)
+        User u = users.findById(id)
+                .filter(usr -> usr.getDeletedAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        UserProfile profile = profiles.findById(id).orElse(null);
+        return UserDto.from(u, profile);
     }
 }

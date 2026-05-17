@@ -1,5 +1,6 @@
 package com.chatapp.backend.user;
 
+import com.chatapp.backend.common.audit.BaseSoftDeletableEntity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,20 +8,16 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users", indexes = {
-        @Index(name = "idx_users_email", columnList = "email", unique = true),
-        @Index(name = "idx_users_username", columnList = "username", unique = true)
-})
+@Table(name = "users")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class User extends BaseSoftDeletableEntity {
 
     @Id
     @GeneratedValue
@@ -29,32 +26,14 @@ public class User {
     @Column(nullable = false, unique = true, length = 32)
     private String username;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 255)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(name = "avatar_url")
-    private String avatarUrl;
-
-    @Column(nullable = false, length = 64)
-    @Builder.Default
-    private String timezone = "Asia/Phnom_Penh";
-
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16,
-            columnDefinition = "varchar(16) not null default 'USER'")
+    @Column(nullable = false, length = 16)
     @Builder.Default
-    private Role role = Role.USER;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @PrePersist
-    void onCreate() {
-        if (createdAt == null) createdAt = Instant.now();
-        if (timezone == null || timezone.isBlank()) timezone = "Asia/Phnom_Penh";
-        if (role == null) role = Role.USER;
-    }
+    private UserStatus status = UserStatus.ACTIVE;
 }

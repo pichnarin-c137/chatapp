@@ -1,5 +1,8 @@
 package com.chatapp.backend.message;
 
+import com.chatapp.backend.common.audit.BaseSoftDeletableEntity;
+import com.chatapp.backend.conversation.Conversation;
+import com.chatapp.backend.user.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,38 +14,43 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "messages", indexes = {
-        @Index(name = "idx_messages_room_sent", columnList = "room_id, sent_at")
-})
+@Table(name = "messages")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Message {
-
-    public enum Type { TEXT, IMAGE, FILE }
+public class Message extends BaseSoftDeletableEntity {
 
     @Id
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "room_id", nullable = false)
-    private UUID roomId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "conversation_id", nullable = false)
+    private Conversation conversation;
 
-    @Column(name = "sender_id", nullable = false)
-    private UUID senderId;
-
-    @Column(nullable = false, length = 4000)
-    private String content;
+    /** Null for SYSTEM messages (e.g. "Alice joined"). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sender_id")
+    private User sender;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default
-    private Type type = Type.TEXT;
+    private MessageType type = MessageType.TEXT;
 
-    @Column(name = "reply_to")
-    private UUID replyTo;
+    @Column(length = 4000)
+    private String body;
+
+    @Column(name = "reply_to_id")
+    private UUID replyToId;
+
+    @Column(name = "thread_root_id")
+    private UUID threadRootId;
+
+    @Column(name = "edited_at")
+    private Instant editedAt;
 
     @Column(name = "sent_at", nullable = false, updatable = false)
     private Instant sentAt;

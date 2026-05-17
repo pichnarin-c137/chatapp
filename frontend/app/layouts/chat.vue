@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import type { User } from '~/types/auth'
-import { LOBBY_ID } from '~/composables/useChat'
+import type { Conversation } from '~/types/conversation'
+import { LOBBY_ID } from '~/types/conversation'
 import { formatRelative } from '~/utils/time'
 
 const route = useRoute()
 const authStore = useAuthStore()
-const chatStore = useChatStore()
-const dmStore = useDmStore()
+const convStore = useConversationStore()
 const { logout } = useAuth()
 const { connect, disconnect } = useStomp()
-const { loadConversations, subscribeConversation, startWith } = useDm()
-const { subscribeRoom, loadHistory } = useChat()
+const {
+  loadMyConversations,
+  subscribeConversation,
+  getOrCreateDirect,
+  loadHistory,
+} = useConversation()
 const { search } = useUserSearch()
 
 const query = ref('')
@@ -20,8 +24,12 @@ const starting = ref(false)
 const showUserMenu = ref(false)
 
 const isSearching = computed(() => query.value.trim().replace(/^@+/, '').length > 0)
-const conversations = computed(() => dmStore.conversations)
+const conversations = computed(() => convStore.conversations)
 const tz = computed(() => authStore.timezone)
+
+const directConversations = computed(() =>
+  conversations.value.filter((c) => c.type === 'DIRECT'),
+)
 
 const inChat = computed(() => {
   const p = route.path
@@ -35,17 +43,17 @@ const activeKey = computed(() => {
 })
 
 const connectionLabel = computed(() => {
-  switch (chatStore.connection) {
+  switch (convStore.connection) {
     case 'connected': return 'Online'
     case 'connecting': return 'Connecting…'
     case 'reconnecting': return 'Reconnecting…'
-    case 'error': return chatStore.lastError || 'Connection error'
+    case 'error': return convStore.lastError || 'Connection error'
     default: return 'Offline'
   }
 })
 
 const connectionColor = computed(() => {
-  switch (chatStore.connection) {
+  switch (convStore.connection) {
     case 'connected': return 'bg-emerald-400'
     case 'connecting':
     case 'reconnecting': return 'bg-amber-400 animate-pulse'
@@ -75,13 +83,13 @@ watch(query, (v) => runSearch(v))
 
 onMounted(async () => {
   connect()
-  subscribeRoom(LOBBY_ID)
+  subscribeConversation(LOBBY_ID)
   await loadHistory(LOBBY_ID).catch(() => {})
   try {
-    const list = await loadConversations()
+    const list = await loadMyConversations()
     for (const c of list) subscribeConversation(c.id)
   } catch (e) {
-    console.error('failed to load DMs', e)
+    console.error('failed to load conversations', e)
   }
 })
 
@@ -89,13 +97,13 @@ async function openSearchResult(user: User) {
   if (starting.value) return
   starting.value = true
   try {
-    const conv = await startWith(user.id)
+    const conv = await getOrCreateDirect(user.id)
     subscribeConversation(conv.id)
     query.value = ''
     results.value = []
     await navigateTo(`/app/dm/${conv.id}`)
   } catch (e) {
-    console.error('startWith failed', e)
+    console.error('getOrCreateDirect failed', e)
   } finally {
     starting.value = false
   }
@@ -103,8 +111,7 @@ async function openSearchResult(user: User) {
 
 async function onLogout() {
   disconnect()
-  chatStore.reset()
-  dmStore.reset()
+  convStore.reset()
   logout()
   await navigateTo('/login')
 }
@@ -113,15 +120,14 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
 }
 
-function preview(conv: { lastMessage: { senderId: string; content: string } | null }) {
-  if (!conv.lastMessage) return 'No messages yet'
-  const isOwn = conv.lastMessage.senderId === authStore.user?.id
-  return (isOwn ? 'You: ' : '') + conv.lastMessage.content
+function convTitle(c: Conversation) {
+  if (c.name) return c.name
+  if (c.type === 'DIRECT') return 'Direct message'
+  return 'Conversation'
 }
 
-function lastTime(conv: { lastMessageAt: string | null; createdAt: string }) {
-  const stamp = conv.lastMessageAt ?? conv.createdAt
-  return formatRelative(stamp, tz.value)
+function lastTime(c: Conversation) {
+  return formatRelative(c.lastMessageAt ?? c.createdAt, tz.value || 'UTC')
 }
 </script>
 
@@ -148,7 +154,6 @@ function lastTime(conv: { lastMessageAt: string | null; createdAt: string }) {
             {{ authStore.user ? initials(authStore.user.username) : '··' }}
           </span>
           <span class="hidden sm:inline">@{{ authStore.user?.username }}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
         <div
           v-if="showUserMenu"
@@ -237,11 +242,11 @@ function lastTime(conv: { lastMessageAt: string | null; createdAt: string }) {
             Direct messages
           </div>
 
-          <div v-if="conversations.length === 0" class="px-4 py-3 text-xs text-slate-500">
+          <div v-if="directConversations.length === 0" class="px-4 py-3 text-xs text-slate-500">
             No DMs yet. Search above to start one.
           </div>
           <ul v-else>
-            <li v-for="c in conversations" :key="c.id">
+            <li v-for="c in directConversations" :key="c.id">
               <NuxtLink
                 :to="`/app/dm/${c.id}`"
                 class="px-3 py-2.5 flex items-center gap-3 transition border-l-2"
@@ -250,14 +255,14 @@ function lastTime(conv: { lastMessageAt: string | null; createdAt: string }) {
                   : 'border-transparent hover:bg-slate-900/60'"
               >
                 <div class="size-10 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-sm font-semibold text-indigo-200 shrink-0">
-                  {{ initials(c.peer.username) }}
+                  {{ initials(convTitle(c)) }}
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-baseline justify-between gap-2">
-                    <span class="text-sm font-medium text-slate-100 truncate">@{{ c.peer.username }}</span>
+                    <span class="text-sm font-medium text-slate-100 truncate">{{ convTitle(c) }}</span>
                     <span class="text-[10px] text-slate-500 font-mono shrink-0">{{ lastTime(c) }}</span>
                   </div>
-                  <div class="text-xs text-slate-400 truncate">{{ preview(c) }}</div>
+                  <div class="text-xs text-slate-400 truncate">Direct conversation</div>
                 </div>
               </NuxtLink>
             </li>

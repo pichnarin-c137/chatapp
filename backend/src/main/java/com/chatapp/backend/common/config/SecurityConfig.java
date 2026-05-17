@@ -47,7 +47,9 @@ public class SecurityConfig {
                 .userDetailsService(adminUserDetailsService)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/admin/login", "/admin/css/**", "/admin/js/**").permitAll()
-                        .anyRequest().hasRole("ADMIN")
+                        // USER_READ is the baseline admin-tier permission; all admin roles have it.
+                        // Endpoint-level checks (USER_DELETE, MESSAGE_DELETE etc.) live in the services.
+                        .anyRequest().hasAuthority("USER_READ")
                 )
                 .formLogin(form -> form
                         .loginPage("/admin/login")

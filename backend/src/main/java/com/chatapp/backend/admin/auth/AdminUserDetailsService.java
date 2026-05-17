@@ -1,6 +1,7 @@
 package com.chatapp.backend.admin.auth;
 
-import com.chatapp.backend.user.Role;
+import com.chatapp.backend.common.audit.CustomUserDetails;
+import com.chatapp.backend.rbac.UserRoleRepository;
 import com.chatapp.backend.user.User;
 import com.chatapp.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,21 +18,27 @@ import java.util.List;
 public class AdminUserDetailsService implements UserDetailsService {
 
     private final UserRepository users;
+    private final UserRoleRepository userRoles;
 
     @Override
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
         User u = users.findByUsername(usernameOrEmail)
                 .or(() -> users.findByEmail(usernameOrEmail.toLowerCase()))
-                .orElseThrow(() -> new UsernameNotFoundException("No admin found for " + usernameOrEmail));
+                .orElseThrow(() -> new UsernameNotFoundException("No user found for " + usernameOrEmail));
 
-        if (u.getRole() != Role.ADMIN) {
-            throw new UsernameNotFoundException("User is not an admin");
+        if (u.getDeletedAt() != null) {
+            throw new UsernameNotFoundException("User has been deleted");
         }
 
-        return new org.springframework.security.core.userdetails.User(
-                u.getUsername(),
-                u.getPasswordHash(),
-                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
-        );
+        List<SimpleGrantedAuthority> authorities = userRoles
+                .findPermissionCodesByUserId(u.getId()).stream()
+                .map(SimpleGrantedAuthority::new)
+                .toList();
+
+        if (authorities.isEmpty()) {
+            throw new UsernameNotFoundException("User has no admin permissions");
+        }
+
+        return new CustomUserDetails(u, authorities);
     }
 }

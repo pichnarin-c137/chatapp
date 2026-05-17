@@ -1,9 +1,9 @@
 package com.chatapp.backend.admin.dashboard;
 
-import com.chatapp.backend.admin.moderation.MessageReport;
-import com.chatapp.backend.admin.moderation.MessageReportRepository;
+import com.chatapp.backend.conversation.ConversationRepository;
 import com.chatapp.backend.message.MessageRepository;
-import com.chatapp.backend.room.ChatRoomRepository;
+import com.chatapp.backend.moderation.MessageReportRepository;
+import com.chatapp.backend.moderation.ReportStatus;
 import com.chatapp.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminDashboardService {
 
     private final UserRepository users;
-    private final ChatRoomRepository rooms;
+    private final ConversationRepository conversations;
     private final MessageRepository messages;
     private final MessageReportRepository reports;
 
@@ -22,11 +22,11 @@ public class AdminDashboardService {
     public DashboardStats stats() {
         return new DashboardStats(
                 users.count(),
-                rooms.count(),
-                messages.count(),
-                reports.countByStatus(MessageReport.Status.OPEN)
+                conversations.countByDeletedAtIsNull(),
+                messages.countByDeletedAtIsNull(),
+                reports.countByStatus(ReportStatus.OPEN)
         );
     }
 
-    public record DashboardStats(long users, long rooms, long messages, long openReports) {}
+    public record DashboardStats(long users, long conversations, long messages, long openReports) {}
 }

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{admin/layout :: layout(~{::content}, 'Conversations', 'conversations')}">
+<body>
+<div th:fragment="content">
+
+  <div class="flex justify-between items-center mb-4">
+    <input type="search"
+           name="q"
+           th:value="${q}"
+           placeholder="Search by name…"
+           class="w-80 px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-500"
+           hx-get="/admin/conversations"
+           hx-trigger="keyup changed delay:300ms, search"
+           hx-target="body"
+           hx-push-url="true"
+           hx-include="this"/>
+    <a href="/admin/conversations/new"
+       class="px-4 py-2 bg-slate-900 text-white text-sm rounded hover:bg-slate-800">+ New conversation</a>
+  </div>
+
+  <div class="bg-white rounded-lg shadow overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-100 text-slate-600 text-left text-xs uppercase">
+        <tr>
+          <th class="px-4 py-3">Name</th>
+          <th class="px-4 py-3">Type</th>
+          <th class="px-4 py-3">Last message</th>
+          <th class="px-4 py-3">Created</th>
+          <th class="px-4 py-3 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        <tr th:each="c : ${conversations}" th:id="'conv-' + ${c.id}">
+          <td class="px-4 py-3 font-medium text-slate-800" th:text="${c.name ?: '(unnamed)'}">Lobby</td>
+          <td class="px-4 py-3">
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600"
+                  th:text="${c.type}">GROUP</span>
+          </td>
+          <td class="px-4 py-3 text-slate-500"
+              th:text="${c.lastMessageAt != null ? #temporals.format(c.lastMessageAt, 'yyyy-MM-dd HH:mm') : '—'}">2026-01-01</td>
+          <td class="px-4 py-3 text-slate-500" th:text="${#temporals.format(c.createdAt, 'yyyy-MM-dd')}">2026-01-01</td>
+          <td class="px-4 py-3 text-right space-x-2">
+            <a th:href="@{'/admin/conversations/' + ${c.id} + '/edit'}"
+               class="text-xs px-2 py-1 border border-slate-300 rounded hover:bg-slate-100">Edit</a>
+            <button class="text-xs px-2 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50"
+                    th:hx-delete="@{'/admin/conversations/' + ${c.id}}"
+                    th:hx-target="'#conv-' + ${c.id}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Soft-delete this conversation?">
+              Delete
+            </button>
+          </td>
+        </tr>
+        <tr th:if="${#lists.isEmpty(conversations)}">
+          <td colspan="5" class="px-4 py-8 text-center text-slate-500">No conversations.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div th:replace="~{admin/fragments/pagination :: pagination(${page}, ${totalPages}, '/admin/conversations')}"></div>
+
+</div>
+</body>
+</html>

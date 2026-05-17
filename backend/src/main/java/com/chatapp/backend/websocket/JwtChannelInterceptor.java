@@ -1,6 +1,7 @@
 package com.chatapp.backend.websocket;
 
 import com.chatapp.backend.common.security.JwtService;
+import com.chatapp.backend.rbac.UserRoleRepository;
 import com.chatapp.backend.user.User;
 import com.chatapp.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -46,9 +48,11 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             }
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new MessagingException("Unknown user"));
-            var authToken = new UsernamePasswordAuthenticationToken(
-                    user, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))
-            );
+            List<SimpleGrantedAuthority> authorities = userRoleRepository
+                    .findPermissionCodesByUserId(user.getId()).stream()
+                    .map(SimpleGrantedAuthority::new)
+                    .toList();
+            var authToken = new UsernamePasswordAuthenticationToken(user, null, authorities);
             accessor.setUser(authToken);
             log.debug("STOMP CONNECT authenticated for user {}", user.getUsername());
         }

@@ -3,37 +3,40 @@ package com.chatapp.backend.message;
 import com.chatapp.backend.user.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
+import java.security.Principal;
+import java.util.UUID;
+
+/**
+ * Unified STOMP endpoint for sending messages into any conversation type
+ * (DM, group, channel). Clients send to /app/conversations/{id}/send and
+ * subscribe to /topic/conversations/{id} to receive broadcasts.
+ */
 @Slf4j
 @Controller
 @RequiredArgsConstructor
 public class ChatStompController {
 
-    private final MessageService messageService;
+    private final MessageService messages;
     private final SimpMessagingTemplate broker;
 
-    @MessageMapping("/group.send")
-    public void sendGroup(@Payload SendMessagePayload payload, Authentication auth) {
-        if (auth == null || !(auth.getPrincipal() instanceof User sender)) {
-            log.warn("Rejecting unauthenticated group.send");
-            return;
-        }
-        if (payload.roomId() == null || payload.content() == null || payload.content().isBlank()) {
-            return;
-        }
+    public record SendPayload(String body, UUID replyToId) {}
 
-        MessageDto saved = messageService.save(
-                payload.roomId(),
-                sender.getId(),
-                payload.content().trim(),
-                payload.replyTo(),
-                sender.getUsername()
-        );
-        broker.convertAndSend("/topic/group." + saved.roomId(), saved);
+    @MessageMapping("/conversations/{conversationId}/send")
+    public void send(@DestinationVariable UUID conversationId,
+                     @Payload SendPayload payload,
+                     Principal principal) {
+        if (!(principal instanceof org.springframework.security.core.Authentication auth)
+                || !(auth.getPrincipal() instanceof User user)) {
+            log.warn("STOMP send rejected — unauthenticated");
+            return;
+        }
+        MessageDto dto = messages.send(conversationId, user.getId(), payload.body(), payload.replyToId());
+        broker.convertAndSend("/topic/conversations/" + conversationId, dto);
     }
 }
