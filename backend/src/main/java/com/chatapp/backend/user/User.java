@@ -42,6 +42,12 @@ public class User {
     @Builder.Default
     private String timezone = "Asia/Phnom_Penh";
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16,
+            columnDefinition = "varchar(16) not null default 'USER'")
+    @Builder.Default
+    private Role role = Role.USER;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -49,5 +55,6 @@ public class User {
     void onCreate() {
         if (createdAt == null) createdAt = Instant.now();
         if (timezone == null || timezone.isBlank()) timezone = "Asia/Phnom_Penh";
+        if (role == null) role = Role.USER;
     }
 }

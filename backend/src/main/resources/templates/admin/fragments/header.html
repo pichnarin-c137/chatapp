@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<header th:fragment="header(title)" class="bg-white border-b border-slate-200">
+  <div class="px-6 py-4 flex items-center justify-between">
+    <h1 class="text-xl font-semibold text-slate-800" th:text="${title ?: 'Admin'}">Admin</h1>
+    <div class="text-sm text-slate-500" th:if="${currentAdmin}" th:text="${currentAdmin}">admin</div>
+  </div>
+</header>
+
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{admin/layout :: layout(~{::content}, 'Dashboard', 'dashboard')}">
+<body>
+<div th:fragment="content">
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white rounded-lg shadow p-5">
+      <div class="text-xs uppercase text-slate-500">Users</div>
+      <div class="text-3xl font-semibold mt-2" th:text="${stats.users}">0</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <div class="text-xs uppercase text-slate-500">Rooms</div>
+      <div class="text-3xl font-semibold mt-2" th:text="${stats.rooms}">0</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <div class="text-xs uppercase text-slate-500">Messages</div>
+      <div class="text-3xl font-semibold mt-2" th:text="${stats.messages}">0</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-5">
+      <div class="text-xs uppercase text-slate-500">Open reports</div>
+      <div class="text-3xl font-semibold mt-2 text-amber-600" th:text="${stats.openReports}">0</div>
+    </div>
+  </div>
+
+  <div class="mt-6 bg-white rounded-lg shadow p-5">
+    <h2 class="text-lg font-semibold text-slate-800 mb-2">Welcome</h2>
+    <p class="text-sm text-slate-600">Use the sidebar to manage users, rooms, and the moderation queue.</p>
+  </div>
+
+</div>
+</body>
+</html>

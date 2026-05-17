@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<div th:fragment="pagination(page, totalPages, baseUrl)"
+     th:if="${totalPages > 1}"
+     class="flex items-center gap-2 mt-4 text-sm">
+  <a th:if="${page > 0}"
+     th:href="@{${baseUrl}(page=${page - 1})}"
+     class="px-3 py-1 border rounded hover:bg-slate-100">Prev</a>
+  <span class="text-slate-600">
+    Page <span th:text="${page + 1}">1</span> of <span th:text="${totalPages}">1</span>
+  </span>
+  <a th:if="${page + 1 < totalPages}"
+     th:href="@{${baseUrl}(page=${page + 1})}"
+     class="px-3 py-1 border rounded hover:bg-slate-100">Next</a>
+</div>
+
+</body>
+</html>
