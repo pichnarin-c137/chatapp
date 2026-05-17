@@ -1,9 +1,9 @@
 package com.chatapp.backend.websocket;
 
 import com.chatapp.backend.common.security.JwtService;
-import com.chatapp.backend.rbac.UserRoleRepository;
-import com.chatapp.backend.user.User;
-import com.chatapp.backend.user.UserRepository;
+import com.chatapp.backend.rbac.repository.UserRoleRepository;
+import com.chatapp.backend.user.entity.User;
+import com.chatapp.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
