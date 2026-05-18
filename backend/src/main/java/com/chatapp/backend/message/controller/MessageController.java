@@ -1,5 +1,10 @@
 package com.chatapp.backend.message.controller;
 import com.chatapp.backend.message.dto.MessageDto;
+import com.chatapp.backend.message.dto.MessagePage;
+import com.chatapp.backend.message.dto.PinDto;
+import com.chatapp.backend.message.service.MessageHistoryService;
+import com.chatapp.backend.message.service.MessagePinService;
+import com.chatapp.backend.message.service.MessageReadReceiptService;
 import com.chatapp.backend.message.service.MessageService;
 
 import com.chatapp.backend.conversation.service.MembershipService;
@@ -20,31 +25,43 @@ import java.util.UUID;
 public class MessageController {
 
     private final MessageService messages;
+    private final MessageHistoryService history;
+    private final MessageReadReceiptService receipts;
+    private final MessagePinService pins;
     private final MembershipService memberships;
 
     @GetMapping("/messages")
-    public List<MessageDto> history(@PathVariable UUID conversationId,
-                                    @RequestParam(defaultValue = "0") int page,
-                                    @RequestParam(defaultValue = "50") int size,
-                                    @AuthenticationPrincipal User current) {
+    public MessagePage history(@PathVariable UUID conversationId,
+                               @RequestParam(required = false) String cursor,
+                               @RequestParam(defaultValue = "50") int limit,
+                               @RequestParam(defaultValue = "BEFORE") MessageHistoryService.Direction direction,
+                               @AuthenticationPrincipal User current) {
         if (!memberships.canRead(conversationId, current.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed");
         }
-        return messages.history(conversationId, page, Math.min(size, 200));
+        return history.history(conversationId, current.getId(), cursor, limit, direction);
     }
 
     @PostMapping("/messages")
     public MessageDto send(@PathVariable UUID conversationId,
                            @RequestBody SendMessageRequest req,
+                           @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
                            @AuthenticationPrincipal User current) {
-        return messages.send(conversationId, current.getId(), req.body(), req.replyToId());
+        return messages.send(conversationId, current.getId(), req.body(), req.replyToId(), idempotencyKey);
     }
 
+    /** Mark conversation as read up to a specific message. Broadcasts message.seen. */
     @PostMapping("/read")
     public void markRead(@PathVariable UUID conversationId,
                          @RequestBody MarkReadRequest req,
                          @AuthenticationPrincipal User current) {
-        memberships.markRead(conversationId, current.getId(), req.lastReadMessageId());
+        receipts.markSeen(conversationId, current.getId(), req.lastReadMessageId());
+    }
+
+    @GetMapping("/pins")
+    public List<PinDto> listPins(@PathVariable UUID conversationId,
+                                 @AuthenticationPrincipal User current) {
+        return pins.listFor(conversationId, current.getId());
     }
 
     public record SendMessageRequest(@NotBlank String body, UUID replyToId) {}

@@ -121,13 +121,27 @@ function initials(name: string) {
 }
 
 function convTitle(c: Conversation) {
-  if (c.name) return c.name
-  if (c.type === 'DIRECT') return 'Direct message'
-  return 'Conversation'
+  if (c.type === 'DIRECT') return c.dmOther?.username ?? 'Direct message'
+  return c.name ?? 'Conversation'
 }
 
 function lastTime(c: Conversation) {
   return formatRelative(c.lastMessageAt ?? c.createdAt, tz.value || 'UTC')
+}
+
+/** One-line preview shown below the conversation title in the sidebar. */
+function lastMessagePreview(c: Conversation): { text: string; muted: boolean } {
+  const lm = c.lastMessage
+  if (!lm) {
+    if (c.type === 'DIRECT') return { text: 'Say hi 👋', muted: true }
+    return { text: c.topic ?? 'No messages yet', muted: true }
+  }
+  if (lm.deleted) return { text: 'message deleted', muted: true }
+  const body = (lm.body ?? '').replace(/\s+/g, ' ').trim() || '(empty)'
+  const isMine = lm.senderId && lm.senderId === authStore.user?.id
+  if (isMine) return { text: `You: ${body}`, muted: false }
+  if (c.type === 'DIRECT') return { text: body, muted: false }
+  return { text: `${lm.senderUsername}: ${body}`, muted: false }
 }
 </script>
 
@@ -262,7 +276,12 @@ function lastTime(c: Conversation) {
                     <span class="text-sm font-medium text-slate-100 truncate">{{ convTitle(c) }}</span>
                     <span class="text-[10px] text-slate-500 font-mono shrink-0">{{ lastTime(c) }}</span>
                   </div>
-                  <div class="text-xs text-slate-400 truncate">Direct conversation</div>
+                  <div
+                    class="text-xs truncate"
+                    :class="lastMessagePreview(c).muted ? 'text-slate-500 italic' : 'text-slate-400'"
+                  >
+                    {{ lastMessagePreview(c).text }}
+                  </div>
                 </div>
               </NuxtLink>
             </li>

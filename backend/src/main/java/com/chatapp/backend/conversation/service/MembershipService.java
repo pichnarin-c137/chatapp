@@ -37,6 +37,15 @@ public class MembershipService {
         return members.existsByConversationIdAndUserIdAndLeftAtIsNull(conversationId, userId);
     }
 
+    /** True if the user is an active OWNER or MOD of this conversation. */
+    @Transactional(readOnly = true)
+    public boolean isConversationModerator(UUID conversationId, UUID userId) {
+        return members.findByConversationIdAndUserId(conversationId, userId)
+                .filter(m -> m.getLeftAt() == null)
+                .map(m -> m.getRole() == MemberRole.OWNER || m.getRole() == MemberRole.MOD)
+                .orElse(false);
+    }
+
     /** True if the user may read this conversation. CHANNELs are open to all authenticated users. */
     @Transactional(readOnly = true)
     public boolean canRead(UUID conversationId, UUID userId) {

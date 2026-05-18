@@ -1,4 +1,8 @@
-import type { Conversation, Message } from '~/types/conversation'
+import type {
+  ChatEvent,
+  Conversation,
+  MessagePage,
+} from '~/types/conversation'
 import { useConversationStore } from '~/stores/conversation'
 
 export function useConversation() {
@@ -27,49 +31,75 @@ export function useConversation() {
     return conv
   }
 
+  /** Initial page of history (newest first from server; reversed for natural scroll). */
   async function loadHistory(id: string) {
-    // Backend returns newest-first; reverse so the UI scrolls naturally.
-    const messages = await request<Message[]>(
-      `/api/conversations/${id}/messages?page=0&size=50`,
+    const page = await request<MessagePage>(
+      `/api/conversations/${id}/messages?limit=50&direction=BEFORE`,
     )
-    const ordered = [...messages].reverse()
-    store.setMessages(id, ordered)
+    const ordered = [...page.items].reverse()
+    store.setMessages(id, ordered, page.nextCursor)
     return ordered
+  }
+
+  /** Page older messages on scroll-to-top. */
+  async function loadOlderHistory(id: string) {
+    const cursor = store.$state.oldestCursorByConversation[id]
+    if (!cursor) return
+    const page = await request<MessagePage>(
+      `/api/conversations/${id}/messages?limit=50&direction=BEFORE&cursor=${encodeURIComponent(cursor)}`,
+    )
+    const ordered = [...page.items].reverse()
+    store.prependMessages(id, ordered, page.nextCursor)
   }
 
   function subscribeConversation(id: string) {
     subscribe(`/topic/conversations/${id}`, (body) => {
       try {
-        const msg = JSON.parse(body) as Message
-        store.appendMessage(msg)
+        const event = JSON.parse(body) as ChatEvent
+        handleEvent(event)
       } catch (e) {
-        console.error('Bad message frame', e)
+        console.error('Bad event frame', e)
       }
     })
+  }
+
+  function handleEvent(event: ChatEvent) {
+    switch (event.event) {
+      case 'message.sent':
+        store.appendMessage(event.message)
+        return
+      case 'message.edited':
+        store.applyEdit(event.convId, event.messageId, event.body, event.editedAt)
+        return
+      case 'message.deleted':
+        store.applyDelete(event.convId, event.messageId, event.deletedAt)
+        return
+      case 'message.seen':
+        store.applySeen(event.convId, event.userId, event.lastSeenMessageId)
+        return
+      case 'message.pinned':
+        store.applyPin(event.pin)
+        return
+      case 'message.unpinned':
+        store.applyUnpin(event.convId, event.messageId)
+        return
+    }
   }
 
   function unsubscribeConversation(id: string) {
     unsubscribe(`/topic/conversations/${id}`)
   }
 
-  function send(id: string, body: string, replyToId?: string | null) {
-    const trimmed = body.trim()
-    if (!trimmed) return
-    publish(`/app/conversations/${id}/send`, {
-      body: trimmed,
-      replyToId: replyToId ?? null,
-    })
-  }
-
   return {
     connect,
     disconnect,
+    publish,
     loadMyConversations,
     getOrCreateDirect,
     loadConversation,
     loadHistory,
+    loadOlderHistory,
     subscribeConversation,
     unsubscribeConversation,
-    send,
   }
 }

@@ -9,8 +9,8 @@ const {
   loadHistory,
   subscribeConversation,
   unsubscribeConversation,
-  send,
 } = useConversation()
+const { send, markSeen } = useChat()
 
 const conversationId = computed(() => String(route.params.id))
 const conversation = computed(() => convStore.conversationById(conversationId.value))
@@ -30,6 +30,13 @@ async function bootstrap(id: string) {
     await loadHistory(id).catch(() => {})
   }
   subscribeConversation(id)
+  markLatestSeen(id)
+}
+
+function markLatestSeen(id: string) {
+  const list = convStore.messagesFor(id)
+  const last = list[list.length - 1]
+  if (last && !last.id.startsWith('temp-')) markSeen(id, last.id)
 }
 
 onMounted(() => bootstrap(conversationId.value))
@@ -41,21 +48,34 @@ watch(conversationId, async (newId, oldId) => {
   }
 })
 
+// Auto-mark new messages as seen when they arrive while this conversation is open.
+watch(
+  () => messages.value.length,
+  () => markLatestSeen(conversationId.value),
+)
+
 function onSend(content: string) {
   send(conversationId.value, content)
 }
 
 const title = computed(() => {
   if (!conversation.value) return 'Loading…'
-  if (conversation.value.name) return conversation.value.name
-  if (conversation.value.type === 'DIRECT') return 'Direct message'
-  return 'Conversation'
+  if (conversation.value.type === 'DIRECT') {
+    return conversation.value.dmOther?.username ?? 'Direct message'
+  }
+  return conversation.value.name ?? 'Conversation'
 })
-const subtitle = computed(() => conversation.value?.topic ?? '')
+const subtitle = computed(() => {
+  if (conversation.value?.type === 'DIRECT' && conversation.value.dmOther) {
+    return `@${conversation.value.dmOther.username}`
+  }
+  return conversation.value?.topic ?? ''
+})
 </script>
 
 <template>
   <ChatPane
+    :conversation-id="conversationId"
     :title="title"
     :subtitle="subtitle"
     :messages="messages"

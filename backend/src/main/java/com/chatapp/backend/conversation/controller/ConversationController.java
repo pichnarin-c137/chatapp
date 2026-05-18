@@ -1,9 +1,9 @@
 package com.chatapp.backend.conversation.controller;
 import com.chatapp.backend.conversation.dto.ConversationDto;
-import com.chatapp.backend.conversation.service.ConversationService;
 import com.chatapp.backend.conversation.entity.Conversation;
-
+import com.chatapp.backend.conversation.service.ConversationService;
 import com.chatapp.backend.user.entity.User;
+
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,32 +23,27 @@ public class ConversationController {
 
     @GetMapping
     public List<ConversationDto> listMine(@AuthenticationPrincipal User current) {
-        var fromMemberships = service.listForUser(current.getId()).stream()
-                .map(m -> ConversationDto.from(m.getConversation()));
-        var fromChannels = service.listPublicChannels().stream()
-                .map(ConversationDto::from);
-        var seen = new java.util.HashSet<UUID>();
-        return java.util.stream.Stream.concat(fromMemberships, fromChannels)
-                .filter(c -> seen.add(c.id()))
-                .toList();
+        return service.listVisibleAsDtos(current.getId());
     }
 
     @GetMapping("/{id}")
-    public ConversationDto get(@PathVariable UUID id) {
-        return ConversationDto.from(service.get(id));
+    public ConversationDto get(@PathVariable UUID id, @AuthenticationPrincipal User current) {
+        return service.getView(id, current.getId());
     }
 
     @PostMapping
     public ResponseEntity<ConversationDto> createGroup(@RequestBody CreateGroupRequest req,
                                                        @AuthenticationPrincipal User current) {
         Conversation c = service.createGroup(req.name(), req.topic(), current.getId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(ConversationDto.from(c));
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ConversationDto.from(c, service.findDmOther(c.getId(), current.getId())));
     }
 
     @PostMapping("/direct/{userId}")
     public ConversationDto getOrCreateDirect(@PathVariable UUID userId,
                                               @AuthenticationPrincipal User current) {
-        return ConversationDto.from(service.getOrCreateDirect(current.getId(), userId));
+        Conversation c = service.getOrCreateDirect(current.getId(), userId);
+        return ConversationDto.from(c, service.findDmOther(c.getId(), current.getId()));
     }
 
     public record CreateGroupRequest(@NotBlank String name, String topic) {}

@@ -45,6 +45,10 @@ public class HibernateAuditListener
             "com.chatapp.backend.message.MessageRead"
     );
 
+    /** Matches audit_log.entity_type / entity_id column widths in V1__init.sql. */
+    private static final int ENTITY_TYPE_MAX = 64;
+    private static final int ENTITY_ID_MAX = 64;
+
     private final EntityManagerFactory entityManagerFactory;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -103,8 +107,8 @@ public class HibernateAuditListener
                         if (actor == null) ps.setNull(1, Types.OTHER);
                         else                ps.setObject(1, actor);
                         ps.setString(2, action.name());
-                        ps.setString(3, type);
-                        ps.setString(4, idString(entity, persister));
+                        ps.setString(3, truncate(type, ENTITY_TYPE_MAX));
+                        ps.setString(4, truncate(idString(entity, persister), ENTITY_ID_MAX));
                         if (beforeJson == null) ps.setNull(5, Types.OTHER); else ps.setString(5, beforeJson);
                         if (afterJson == null)  ps.setNull(6, Types.OTHER); else ps.setString(6, afterJson);
                     }
@@ -118,6 +122,11 @@ public class HibernateAuditListener
     private String idString(Object entity, EntityPersister persister) {
         Object id = persister.getIdentifier(entity, (org.hibernate.engine.spi.SharedSessionContractImplementor) null);
         return id == null ? "" : id.toString();
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() > max ? s.substring(0, max) : s;
     }
 
     private Map<String, Object> toMap(Object[] state, EntityPersister persister) {
