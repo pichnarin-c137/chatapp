@@ -31,6 +31,7 @@ async function bootstrap(id: string) {
   }
   subscribeConversation(id)
   markLatestSeen(id)
+  convStore.clearMentionUnread(id)
 }
 
 function markLatestSeen(id: string) {
@@ -51,7 +52,10 @@ watch(conversationId, async (newId, oldId) => {
 // Auto-mark new messages as seen when they arrive while this conversation is open.
 watch(
   () => messages.value.length,
-  () => markLatestSeen(conversationId.value),
+  () => {
+    markLatestSeen(conversationId.value)
+    convStore.clearMentionUnread(conversationId.value)
+  },
 )
 
 function onSend(content: string) {

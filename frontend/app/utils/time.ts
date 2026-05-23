@@ -15,7 +15,7 @@ export function formatDateTime(
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hour12: true,
   }).format(toDate(input))
 }
 
@@ -27,7 +27,7 @@ export function formatTime(
     timeZone: timezone,
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hour12: true,
   }).format(toDate(input))
 }
 

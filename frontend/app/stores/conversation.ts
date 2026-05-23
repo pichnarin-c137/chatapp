@@ -17,6 +17,8 @@ interface State {
   pinsByConversation: Record<string, Pin[]>
   /** Per-conversation pending reply selection (message-to-be-quoted in the next send). */
   replyDraftByConversation: Record<string, Message | null>
+  /** Count of unread @mentions per conversation; drives sidebar red dot. */
+  mentionUnreadByConversation: Record<string, number>
   connection: ConnectionStatus
   lastError: string | null
 }
@@ -29,6 +31,7 @@ export const useConversationStore = defineStore('conversation', {
     seenByConversation: {},
     pinsByConversation: {},
     replyDraftByConversation: {},
+    mentionUnreadByConversation: {},
     connection: 'idle',
     lastError: null,
   }),
@@ -44,6 +47,8 @@ export const useConversationStore = defineStore('conversation', {
       s.pinsByConversation[conversationId] ?? [],
     replyDraftFor: (s) => (conversationId: string) =>
       s.replyDraftByConversation[conversationId] ?? null,
+    mentionUnreadFor: (s) => (conversationId: string) =>
+      s.mentionUnreadByConversation[conversationId] ?? 0,
   },
 
   actions: {
@@ -244,6 +249,21 @@ export const useConversationStore = defineStore('conversation', {
       }
     },
 
+    bumpMentionUnread(conversationId: string) {
+      const current = this.mentionUnreadByConversation[conversationId] ?? 0
+      this.mentionUnreadByConversation = {
+        ...this.mentionUnreadByConversation,
+        [conversationId]: current + 1,
+      }
+    },
+
+    clearMentionUnread(conversationId: string) {
+      if (!this.mentionUnreadByConversation[conversationId]) return
+      const next = { ...this.mentionUnreadByConversation }
+      delete next[conversationId]
+      this.mentionUnreadByConversation = next
+    },
+
     setConnection(status: ConnectionStatus, error: string | null = null) {
       this.connection = status
       this.lastError = error
@@ -256,6 +276,7 @@ export const useConversationStore = defineStore('conversation', {
       this.seenByConversation = {}
       this.pinsByConversation = {}
       this.replyDraftByConversation = {}
+      this.mentionUnreadByConversation = {}
       this.connection = 'idle'
       this.lastError = null
     },

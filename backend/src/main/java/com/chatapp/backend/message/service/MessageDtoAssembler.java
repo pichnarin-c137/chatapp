@@ -1,16 +1,24 @@
 package com.chatapp.backend.message.service;
 
+import com.chatapp.backend.common.security.CustomUserDetails;
+import com.chatapp.backend.message.dto.MentionDto;
 import com.chatapp.backend.message.dto.MessageDto;
+import com.chatapp.backend.message.dto.ReactionDto;
 import com.chatapp.backend.message.entity.Message;
 import com.chatapp.backend.message.entity.MessageForward;
+import com.chatapp.backend.message.entity.MessageMention;
 import com.chatapp.backend.message.repository.MessageForwardRepository;
+import com.chatapp.backend.message.repository.MessageMentionRepository;
 import com.chatapp.backend.message.repository.MessageRepository;
 import com.chatapp.backend.user.entity.User;
 import com.chatapp.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,10 +31,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Bulk-builds MessageDtos with replyTo and forwardOf previews preloaded.
- * History queries can serve large pages without N+1 lookups: a single
- * pass collects all referenced ids, one shot per related table fetches
- * them, and DTOs assemble from the in-memory maps.
+ * Bulk-builds MessageDtos with replyTo, forwardOf, mentions, and reactions
+ * preloaded. History queries can serve large pages without N+1 lookups: a
+ * single pass collects all referenced ids, one shot per related table
+ * fetches them, and DTOs assemble from the in-memory maps.
  */
 @Service
 @RequiredArgsConstructor
@@ -34,11 +42,15 @@ public class MessageDtoAssembler {
 
     private final MessageRepository messages;
     private final MessageForwardRepository forwards;
+    private final MessageMentionRepository mentions;
+    private final MessageReactionService reactionService;
     private final UserRepository users;
 
     @Transactional(readOnly = true)
     public List<MessageDto> assemble(List<Message> rows) {
         if (rows.isEmpty()) return List.of();
+
+        UUID viewerId = currentUserId();
 
         // Senders for the rows themselves.
         Set<UUID> senderIds = rows.stream()
@@ -57,6 +69,17 @@ public class MessageDtoAssembler {
         Map<UUID, MessageForward> forwardByMsg = forwards.findByForwardedMessageIdIn(rowIds).stream()
                 .collect(Collectors.toMap(MessageForward::getForwardedMessageId, f -> f));
 
+        // Mentions for the rows; group by messageId.
+        Map<UUID, List<MessageMention>> mentionsByMsg = new HashMap<>();
+        for (MessageMention mm : mentions.findByMessageIdIn(rowIds)) {
+            mentionsByMsg
+                    .computeIfAbsent(mm.getId().getMessageId(), k -> new ArrayList<>())
+                    .add(mm);
+        }
+
+        // Reactions, grouped by message + emoji with `mine` baked in for the viewer.
+        Map<UUID, List<ReactionDto>> reactionsByMsg = reactionService.listForMessages(rowIds, viewerId);
+
         // Collect every user id we still need a username for.
         Set<UUID> userIds = new HashSet<>(senderIds);
         // Reply parents have their own senders.
@@ -70,11 +93,17 @@ public class MessageDtoAssembler {
         for (MessageForward f : forwardByMsg.values()) {
             userIds.add(f.getOriginalSenderId());
         }
+        // Mentioned users — we need their usernames for the DTO.
+        for (List<MessageMention> ms : mentionsByMsg.values()) {
+            for (MessageMention mm : ms) userIds.add(mm.getId().getMentionedUserId());
+        }
 
         Map<UUID, String> usernames = users.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getUsername));
 
-        return rows.stream().map(m -> assembleOne(m, usernames, repliedTo, forwardByMsg)).toList();
+        return rows.stream()
+                .map(m -> assembleOne(m, usernames, repliedTo, forwardByMsg, mentionsByMsg, reactionsByMsg))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -89,13 +118,17 @@ public class MessageDtoAssembler {
                 base.id(), base.conversationId(), base.senderId(), base.senderUsername(),
                 base.type(), base.body(), base.replyToId(),
                 base.editedAt(), base.sentAt(), base.deletedAt(),
-                base.replyTo(), base.forwardOf(), idempotencyKey);
+                base.replyTo(), base.forwardOf(),
+                base.mentions(), base.reactions(),
+                idempotencyKey);
     }
 
     private MessageDto assembleOne(Message m,
                                    Map<UUID, String> usernames,
                                    Map<UUID, Message> repliedTo,
-                                   Map<UUID, MessageForward> forwardByMsg) {
+                                   Map<UUID, MessageForward> forwardByMsg,
+                                   Map<UUID, List<MessageMention>> mentionsByMsg,
+                                   Map<UUID, List<ReactionDto>> reactionsByMsg) {
         String senderUsername = m.getSender() == null
                 ? "system"
                 : usernames.getOrDefault(m.getSender().getId(), "unknown");
@@ -124,7 +157,20 @@ public class MessageDtoAssembler {
                     usernames.getOrDefault(f.getOriginalSenderId(), "unknown"));
         }
 
-        return MessageDto.from(m, senderUsername, replyPreview, forwardInfo, null);
+        List<MentionDto> mentionDtos = mentionsByMsg
+                .getOrDefault(m.getId(), List.of())
+                .stream()
+                .map(mm -> new MentionDto(
+                        mm.getId().getMentionedUserId(),
+                        usernames.getOrDefault(mm.getId().getMentionedUserId(), "unknown"),
+                        mm.getStartIndex(),
+                        mm.getEndIndex()))
+                .toList();
+
+        List<ReactionDto> reactionDtos = reactionsByMsg.getOrDefault(m.getId(), List.of());
+
+        return MessageDto.from(m, senderUsername, replyPreview, forwardInfo,
+                mentionDtos, reactionDtos, null);
     }
 
     /**
@@ -162,5 +208,14 @@ public class MessageDtoAssembler {
         Map<UUID, String> out = new HashMap<>();
         users.findAllById(userIds).forEach(u -> out.put(u.getId(), u.getUsername()));
         return out;
+    }
+
+    private UUID currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        Object p = auth.getPrincipal();
+        if (p instanceof User u) return u.getId();
+        if (p instanceof CustomUserDetails cud) return cud.getId();
+        return null;
     }
 }

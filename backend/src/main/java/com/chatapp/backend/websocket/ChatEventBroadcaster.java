@@ -6,6 +6,9 @@ import com.chatapp.backend.message.event.MessagePinnedEvent;
 import com.chatapp.backend.message.event.MessageSeenEvent;
 import com.chatapp.backend.message.event.MessageSentEvent;
 import com.chatapp.backend.message.event.MessageUnpinnedEvent;
+import com.chatapp.backend.message.event.ReactionChangedEvent;
+import com.chatapp.backend.presence.event.PresenceChangedEvent;
+import com.chatapp.backend.typing.event.TypingChangedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -18,9 +21,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Listens for domain events and pushes STOMP envelopes to /topic/conversations/{id}.
- * Using @TransactionalEventListener(AFTER_COMMIT) so we never broadcast a write
- * that subsequently rolled back.
+ * Listens for domain events and pushes STOMP envelopes to subscribers.
+ * Persistent events use @TransactionalEventListener(AFTER_COMMIT) so we
+ * never broadcast a write that subsequently rolled back. Ephemeral events
+ * (typing, presence) use plain @EventListener.
  */
 @Component
 @RequiredArgsConstructor
@@ -93,6 +97,39 @@ public class ChatEventBroadcaster {
                 "lastSeenMessageId", e.lastSeenMessageId(),
                 "seenAt", e.seenAt()
         ));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onReactionChanged(ReactionChangedEvent e) {
+        send(e.conversationId(), Map.of(
+                "event", "reaction.changed",
+                "convId", e.conversationId(),
+                "messageId", e.messageId(),
+                "userId", e.userId(),
+                "emoji", e.emoji(),
+                "action", e.action().name()
+        ));
+    }
+
+    @EventListener
+    public void onTypingChanged(TypingChangedEvent e) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("event", e.action() == TypingChangedEvent.Action.START ? "typing.start" : "typing.stop");
+        body.put("convId", e.conversationId());
+        body.put("userId", e.userId());
+        body.put("username", e.username());
+        if (e.expiresAt() != null) body.put("expiresAt", e.expiresAt());
+        broker.convertAndSend("/topic/conversations/" + e.conversationId() + "/typing", body);
+    }
+
+    @EventListener
+    public void onPresenceChanged(PresenceChangedEvent e) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("event", "presence.update");
+        body.put("userId", e.userId());
+        body.put("status", e.presence().status().name());
+        body.put("lastSeenAt", e.presence().lastSeenAt());
+        broker.convertAndSend("/topic/users/" + e.userId() + "/presence", body);
     }
 
     private void send(UUID conversationId, Object payload) {

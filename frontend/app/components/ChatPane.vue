@@ -2,6 +2,8 @@
 import type { Message } from '~/types/conversation'
 import { useConversationStore } from '~/stores/conversation'
 import { useChat } from '~/composables/useChat'
+import { useTyping } from '~/composables/useTyping'
+import TypingIndicator from './TypingIndicator.vue'
 
 const props = defineProps<{
   conversationId: string
@@ -23,6 +25,7 @@ const emit = defineEmits<{
 
 const store = useConversationStore()
 const { cancelReply, loadPins } = useChat()
+const { notifyTyping, stopTyping, teardown: teardownTyping } = useTyping()
 
 const text = ref('')
 const listRef = ref<HTMLElement | null>(null)
@@ -51,8 +54,13 @@ onMounted(async () => {
 })
 
 // Re-load pins on conversation switch.
-watch(() => props.conversationId, async (id) => {
+watch(() => props.conversationId, async (id, oldId) => {
+  if (oldId) stopTyping(oldId)
   try { await loadPins(id) } catch {}
+})
+
+onBeforeUnmount(() => {
+  teardownTyping()
 })
 
 watch(() => props.messages, scrollToBottom, { deep: false, flush: 'post' })
@@ -64,11 +72,17 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+function onInput() {
+  if (text.value.trim().length === 0) return
+  notifyTyping(props.conversationId)
+}
+
 function submit() {
   const v = text.value.trim()
   if (!v) return
   emit('send', v)
   text.value = ''
+  stopTyping(props.conversationId)
 }
 
 function initials(name: string) {
@@ -172,6 +186,8 @@ function jumpToPin() {
       </div>
     </main>
 
+    <TypingIndicator :conversation-id="conversationId" />
+
     <footer class="border-t border-slate-800 px-4 sm:px-6 py-3">
       <ReplyPreview
         v-if="replyDraft"
@@ -186,13 +202,14 @@ function jumpToPin() {
         dismissable
         @cancel="cancelReply(conversationId)"
       />
-      <div class="flex items-end gap-2 bg-slate-900/60 border border-slate-800 rounded-2xl px-3 py-2 focus-within:border-indigo-500/60 transition">
+      <div class="relative -top-1 flex items-end gap-2 bg-slate-900/60 border border-slate-800 rounded-2xl px-3 py-2 focus-within:border-indigo-500/60 transition">
         <textarea
           v-model="text"
           rows="1"
           :placeholder="placeholder ?? 'Message'"
-          class="flex-1 resize-none bg-transparent outline-none text-sm placeholder:text-slate-500 max-h-32"
+          class="flex-1 resize-none bg-transparent outline-none text-sm leading-6 pt-2 pb-1 placeholder:text-slate-500 max-h-32"
           @keydown="onKeydown"
+          @input="onInput"
         />
         <button
           class="text-sm font-medium rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 transition"

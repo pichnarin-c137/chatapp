@@ -49,6 +49,34 @@ export interface ForwardInfo {
   originalSenderUsername: string
 }
 
+export interface MentionRange {
+  userId: string
+  username: string
+  startIndex: number
+  endIndex: number
+}
+
+export interface Reaction {
+  messageId: string
+  emoji: string
+  count: number
+  userIds: string[]
+  mine: boolean
+}
+
+export type PresenceStatus = 'ONLINE' | 'OFFLINE'
+
+export interface PresenceSnapshot {
+  status: PresenceStatus
+  lastSeenAt: string | null
+}
+
+export interface Typer {
+  userId: string
+  username: string
+  expiresAt: string
+}
+
 export interface Message {
   id: string
   conversationId: string
@@ -65,6 +93,10 @@ export interface Message {
   replyTo?: ReplyPreview | null
   /** Provenance for forwarded messages — original sender + source conversation. */
   forwardOf?: ForwardInfo | null
+  /** Parsed @-mentions; rendered as highlight spans. */
+  mentions?: MentionRange[]
+  /** Grouped emoji buckets (count + mine). */
+  reactions?: Reaction[]
   /** Echoed by server on broadcasts so we can swap the optimistic placeholder. */
   idempotencyKey?: string | null
   /** Client-only: marks an optimistic message that hasn't been ack'd yet. */
@@ -147,6 +179,46 @@ interface MessageUnpinnedEvent {
   unpinnedBy: string
 }
 
+interface ReactionChangedEvent {
+  event: 'reaction.changed'
+  convId: string
+  messageId: string
+  userId: string
+  emoji: string
+  action: 'ADD' | 'REMOVE'
+}
+
+interface TypingStartEvent {
+  event: 'typing.start'
+  convId: string
+  userId: string
+  username: string
+  expiresAt: string
+}
+
+interface TypingStopEvent {
+  event: 'typing.stop'
+  convId: string
+  userId: string
+  username: string
+}
+
+interface PresenceUpdateEvent {
+  event: 'presence.update'
+  userId: string
+  status: PresenceStatus
+  lastSeenAt: string | null
+}
+
+export interface MentionNotificationEvent {
+  event: 'mention'
+  convId: string
+  messageId: string
+  fromUserId: string | null
+  fromUsername: string
+  preview: string
+}
+
 export type ChatEvent =
   | MessageSentEvent
   | MessageEditedEvent
@@ -154,6 +226,10 @@ export type ChatEvent =
   | MessageSeenEvent
   | MessagePinnedEvent
   | MessageUnpinnedEvent
+  | ReactionChangedEvent
+  | TypingStartEvent
+  | TypingStopEvent
+  | PresenceUpdateEvent
 
 export interface EditHistoryEntry {
   id: string

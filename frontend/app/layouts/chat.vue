@@ -3,6 +3,8 @@ import type { User } from '~/types/auth'
 import type { Conversation } from '~/types/conversation'
 import { LOBBY_ID } from '~/types/conversation'
 import { formatRelative } from '~/utils/time'
+import { usePresence } from '~/composables/usePresence'
+import { usePresenceStore } from '~/stores/presence'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -14,7 +16,10 @@ const {
   subscribeConversation,
   getOrCreateDirect,
   loadHistory,
+  subscribeMentionNotifications,
 } = useConversation()
+const presenceStore = usePresenceStore()
+const { watch: watchPresence, startHeartbeat, teardown: teardownPresence } = usePresence()
 const { search } = useUserSearch()
 
 const query = ref('')
@@ -84,14 +89,30 @@ watch(query, (v) => runSearch(v))
 onMounted(async () => {
   connect()
   subscribeConversation(LOBBY_ID)
+  subscribeMentionNotifications()
+  startHeartbeat()
   await loadHistory(LOBBY_ID).catch(() => {})
   try {
     const list = await loadMyConversations()
     for (const c of list) subscribeConversation(c.id)
+    syncPresenceWatchers()
   } catch (e) {
     console.error('failed to load conversations', e)
   }
 })
+
+onBeforeUnmount(() => {
+  teardownPresence()
+})
+
+watch(directConversations, () => syncPresenceWatchers(), { deep: true })
+
+function syncPresenceWatchers() {
+  const ids = directConversations.value
+    .map((c) => c.dmOther?.id)
+    .filter((id): id is string => !!id)
+  watchPresence(ids)
+}
 
 async function openSearchResult(user: User) {
   if (starting.value) return
@@ -268,19 +289,33 @@ function lastMessagePreview(c: Conversation): { text: string; muted: boolean } {
                   ? 'bg-indigo-500/10 border-indigo-400'
                   : 'border-transparent hover:bg-slate-900/60'"
               >
-                <div class="size-10 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-sm font-semibold text-indigo-200 shrink-0">
-                  {{ initials(convTitle(c)) }}
+                <div class="relative shrink-0">
+                  <div class="size-10 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-sm font-semibold text-indigo-200">
+                    {{ initials(convTitle(c)) }}
+                  </div>
+                  <span
+                    v-if="c.dmOther?.id && presenceStore.isOnline(c.dmOther.id)"
+                    class="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-emerald-400 ring-2 ring-slate-950"
+                    aria-label="Online"
+                  />
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-baseline justify-between gap-2">
                     <span class="text-sm font-medium text-slate-100 truncate">{{ convTitle(c) }}</span>
                     <span class="text-[10px] text-slate-500 font-mono shrink-0">{{ lastTime(c) }}</span>
                   </div>
-                  <div
-                    class="text-xs truncate"
-                    :class="lastMessagePreview(c).muted ? 'text-slate-500 italic' : 'text-slate-400'"
-                  >
-                    {{ lastMessagePreview(c).text }}
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <div
+                      class="text-xs truncate"
+                      :class="lastMessagePreview(c).muted ? 'text-slate-500 italic' : 'text-slate-400'"
+                    >
+                      {{ lastMessagePreview(c).text }}
+                    </div>
+                    <span
+                      v-if="convStore.mentionUnreadFor(c.id) > 0"
+                      class="ml-auto inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-rose-500 text-[10px] text-white font-semibold tabular-nums"
+                      :title="`${convStore.mentionUnreadFor(c.id)} unread mention${convStore.mentionUnreadFor(c.id) === 1 ? '' : 's'}`"
+                    >{{ convStore.mentionUnreadFor(c.id) }}</span>
                   </div>
                 </div>
               </NuxtLink>

@@ -52,7 +52,14 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
                     .findPermissionCodesByUserId(user.getId()).stream()
                     .map(SimpleGrantedAuthority::new)
                     .toList();
-            var authToken = new UsernamePasswordAuthenticationToken(user, null, authorities);
+            // Override getName() so Spring's user-destination resolver
+            // (convertAndSendToUser) can address frames by user id.
+            var authToken = new UsernamePasswordAuthenticationToken(user, null, authorities) {
+                @Override
+                public String getName() {
+                    return user.getId().toString();
+                }
+            };
             accessor.setUser(authToken);
             log.debug("STOMP CONNECT authenticated for user {}", user.getUsername());
         }

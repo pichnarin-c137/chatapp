@@ -3,6 +3,7 @@ import com.chatapp.backend.message.entity.Message;
 import com.chatapp.backend.message.entity.MessageType;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record MessageDto(
@@ -20,6 +21,10 @@ public record MessageDto(
         ReplyPreview replyTo,
         /** Set when this message is a forward; points back to the original. */
         ForwardInfo forwardOf,
+        /** @-mentions parsed at send time; client renders highlight spans from these. */
+        List<MentionDto> mentions,
+        /** Grouped emoji buckets with `mine` flag for the viewer. */
+        List<ReactionDto> reactions,
         /** Echoed back on broadcasts so optimistic clients can swap their temp message. */
         String idempotencyKey
 ) {
@@ -40,17 +45,19 @@ public record MessageDto(
     ) {}
 
     public static MessageDto from(Message m, String senderUsername) {
-        return from(m, senderUsername, null, null, null);
+        return from(m, senderUsername, null, null, List.of(), List.of(), null);
     }
 
     public static MessageDto from(Message m, String senderUsername, String idempotencyKey) {
-        return from(m, senderUsername, null, null, idempotencyKey);
+        return from(m, senderUsername, null, null, List.of(), List.of(), idempotencyKey);
     }
 
     public static MessageDto from(Message m,
                                   String senderUsername,
                                   ReplyPreview replyTo,
                                   ForwardInfo forwardOf,
+                                  List<MentionDto> mentions,
+                                  List<ReactionDto> reactions,
                                   String idempotencyKey) {
         return new MessageDto(
                 m.getId(),
@@ -65,6 +72,8 @@ public record MessageDto(
                 m.getDeletedAt(),
                 replyTo,
                 forwardOf,
+                mentions == null ? List.of() : mentions,
+                reactions == null ? List.of() : reactions,
                 idempotencyKey
         );
     }

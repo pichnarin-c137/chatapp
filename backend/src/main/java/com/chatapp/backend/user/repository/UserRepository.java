@@ -21,6 +21,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("""
             select u from User u
             where u.deletedAt is null
+              and u.username in :usernames
+            """)
+    List<User> findByUsernameIn(@Param("usernames") java.util.Collection<String> usernames);
+
+    @Query("""
+            select u from User u
+            where u.deletedAt is null
               and lower(u.username) like lower(concat(:q, '%'))
               and u.id <> :excludeId
             order by u.username asc

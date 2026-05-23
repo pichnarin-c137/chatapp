@@ -1,6 +1,7 @@
-import type { EditHistoryEntry, Message, Pin } from '~/types/conversation'
+import type { EditHistoryEntry, Message, Pin, Reaction } from '~/types/conversation'
 import { useAuthStore } from '~/stores/auth'
 import { useConversationStore } from '~/stores/conversation'
+import { useReactionStore } from '~/stores/reactions'
 
 /**
  * High-level chat actions. Owns optimistic UI, idempotency keys, and the
@@ -9,6 +10,7 @@ import { useConversationStore } from '~/stores/conversation'
  */
 export function useChat() {
   const store = useConversationStore()
+  const reactionStore = useReactionStore()
   const auth = useAuthStore()
   const { request } = useApi()
   const { publish } = useStomp()
@@ -119,6 +121,77 @@ export function useChat() {
     })
   }
 
+  // --- Reactions -----------------------------------------------------------
+
+  async function addReaction(messageId: string, emoji: string) {
+    if (!emoji) return
+    const encoded = encodeURIComponent(emoji)
+    // Optimistic apply — the broadcast echo will be a no-op via the
+    // duplicate check inside applyChange.
+    if (auth.user?.id) {
+      reactionStore.applyChange({
+        messageId,
+        userId: auth.user.id,
+        emoji,
+        action: 'ADD',
+        viewerId: auth.user.id,
+      })
+    }
+    try {
+      await request<void>(`/api/messages/${messageId}/reactions/${encoded}`, { method: 'PUT' })
+    } catch (e) {
+      if (auth.user?.id) {
+        reactionStore.applyChange({
+          messageId,
+          userId: auth.user.id,
+          emoji,
+          action: 'REMOVE',
+          viewerId: auth.user.id,
+        })
+      }
+      throw e
+    }
+  }
+
+  async function removeReaction(messageId: string, emoji: string) {
+    if (!emoji) return
+    const encoded = encodeURIComponent(emoji)
+    if (auth.user?.id) {
+      reactionStore.applyChange({
+        messageId,
+        userId: auth.user.id,
+        emoji,
+        action: 'REMOVE',
+        viewerId: auth.user.id,
+      })
+    }
+    try {
+      await request<void>(`/api/messages/${messageId}/reactions/${encoded}`, { method: 'DELETE' })
+    } catch (e) {
+      if (auth.user?.id) {
+        reactionStore.applyChange({
+          messageId,
+          userId: auth.user.id,
+          emoji,
+          action: 'ADD',
+          viewerId: auth.user.id,
+        })
+      }
+      throw e
+    }
+  }
+
+  function toggleReaction(messageId: string, emoji: string) {
+    const list = reactionStore.reactionsFor(messageId)
+    const bucket = list.find((r) => r.emoji === emoji)
+    if (bucket?.mine) return removeReaction(messageId, emoji)
+    return addReaction(messageId, emoji)
+  }
+
+  async function loadReactions(messageId: string): Promise<Reaction[]> {
+    return await request<Reaction[]>(`/api/messages/${messageId}/reactions`)
+  }
+
   // --- Reply draft ---------------------------------------------------------
 
   function startReply(conversationId: string, msg: Message) {
@@ -140,6 +213,10 @@ export function useChat() {
     pin,
     unpin,
     forward,
+    addReaction,
+    removeReaction,
+    toggleReaction,
+    loadReactions,
     startReply,
     cancelReply,
   }

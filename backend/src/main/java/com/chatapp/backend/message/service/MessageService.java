@@ -2,11 +2,14 @@ package com.chatapp.backend.message.service;
 import com.chatapp.backend.message.dto.MessageDto;
 import com.chatapp.backend.message.entity.Message;
 import com.chatapp.backend.message.entity.MessageEdit;
+import com.chatapp.backend.message.entity.MessageMention;
+import com.chatapp.backend.message.entity.MessageMentionId;
 import com.chatapp.backend.message.entity.MessageType;
 import com.chatapp.backend.message.event.MessageDeletedEvent;
 import com.chatapp.backend.message.event.MessageEditedEvent;
 import com.chatapp.backend.message.event.MessageSentEvent;
 import com.chatapp.backend.message.repository.MessageEditRepository;
+import com.chatapp.backend.message.repository.MessageMentionRepository;
 import com.chatapp.backend.message.repository.MessageRepository;
 
 import com.chatapp.backend.common.cache.IdempotencyService;
@@ -28,8 +31,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -42,11 +50,13 @@ public class MessageService {
 
     private final MessageRepository messages;
     private final MessageEditRepository messageEdits;
+    private final MessageMentionRepository messageMentions;
     private final ConversationRepository conversations;
     private final MembershipService memberships;
     private final UserRepository users;
     private final IdempotencyService idempotency;
     private final MessageDtoAssembler assembler;
+    private final MentionParser mentionParser;
     private final ApplicationEventPublisher events;
 
     @Transactional
@@ -84,10 +94,44 @@ public class MessageService {
         Message saved = messages.save(msg);
         c.setLastMessageAt(saved.getSentAt());
 
+        persistMentions(saved, c.getType(), conversationId);
+
         MessageDto dto = assembler.assembleOne(saved, idempotencyKey);
         idempotency.store(senderId, idempotencyKey, saved.getId().toString());
         events.publishEvent(new MessageSentEvent(conversationId, dto));
         return dto;
+    }
+
+    /**
+     * Parse @username tokens out of the body, resolve to user ids, and
+     * persist message_mentions rows for any that are eligible to be
+     * mentioned (active members of the conversation; for CHANNELs we
+     * allow any registered user since channels are open-read).
+     *
+     * Non-resolvable or non-eligible mentions are silently dropped —
+     * we never reject the whole message for a typoed @handle.
+     */
+    private void persistMentions(Message saved, ConversationType convType, UUID conversationId) {
+        List<MentionParser.RawMention> raw = mentionParser.extract(saved.getBody());
+        if (raw.isEmpty()) return;
+
+        List<String> usernames = raw.stream().map(MentionParser.RawMention::username).toList();
+        Map<String, User> byName = users.findByUsernameIn(usernames).stream()
+                .collect(Collectors.toMap(User::getUsername, u -> u, (a, b) -> a));
+
+        Set<UUID> persisted = new HashSet<>();
+        for (MentionParser.RawMention r : raw) {
+            User u = byName.get(r.username());
+            if (u == null) continue;
+            if (convType != ConversationType.CHANNEL
+                    && !memberships.isActiveMember(conversationId, u.getId())) continue;
+            if (!persisted.add(u.getId())) continue; // unique per (message, user)
+            messageMentions.save(MessageMention.builder()
+                    .id(new MessageMentionId(saved.getId(), u.getId()))
+                    .startIndex(r.start())
+                    .endIndex(r.end())
+                    .build());
+        }
     }
 
     @Transactional
