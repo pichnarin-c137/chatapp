@@ -16,6 +16,21 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    # No host port mapping — only the backend (same docker network) talks to it.
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     image: maven:3.9-eclipse-temurin-17
     container_name: chat-backend
@@ -30,11 +45,15 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      APP_CORS_ALLOWED_ORIGINS: http://localhost:3000
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://0.0.0.0:3000,http://127.0.0.1:3000
       APP_JWT_SECRET: dev-secret-change-me-256-bit-minimum-please-rotate-in-prod
       APP_JWT_EXPIRATION: 86400000
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -56,5 +75,6 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   maven_cache:
   frontend_node_modules:

@@ -20,14 +20,24 @@
          class="block px-5 py-2 text-sm">Users</a>
     </li>
     <li>
-      <a href="/admin/rooms"
-         th:classappend="${active == 'rooms'} ? ' bg-slate-800 text-white' : ' hover:bg-slate-800/60'"
-         class="block px-5 py-2 text-sm">Rooms</a>
+      <a href="/admin/conversations"
+         th:classappend="${active == 'conversations'} ? ' bg-slate-800 text-white' : ' hover:bg-slate-800/60'"
+         class="block px-5 py-2 text-sm">Conversations</a>
     </li>
     <li>
       <a href="/admin/moderation"
          th:classappend="${active == 'moderation'} ? ' bg-slate-800 text-white' : ' hover:bg-slate-800/60'"
          class="block px-5 py-2 text-sm">Moderation</a>
+    </li>
+    <li>
+      <a href="/admin/roles"
+         th:classappend="${active == 'roles'} ? ' bg-slate-800 text-white' : ' hover:bg-slate-800/60'"
+         class="block px-5 py-2 text-sm">Roles &amp; permissions</a>
+    </li>
+    <li>
+      <a href="/admin/audit"
+         th:classappend="${active == 'audit'} ? ' bg-slate-800 text-white' : ' hover:bg-slate-800/60'"
+         class="block px-5 py-2 text-sm">Audit log</a>
     </li>
   </ul>
 

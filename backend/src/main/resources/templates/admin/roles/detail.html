@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{admin/layout :: layout(~{::content}, 'Role', 'roles')}">
+<body>
+<div th:fragment="content">
+
+  <a href="/admin/roles" class="text-xs text-slate-500 hover:underline">← back to roles</a>
+
+  <div class="mt-3 bg-white rounded-lg shadow p-5">
+    <div class="flex items-center gap-3">
+      <h2 class="text-lg font-semibold text-slate-800" th:text="${role.name}">Name</h2>
+      <span class="font-mono text-xs text-slate-500" th:text="${role.code}">CODE</span>
+      <span th:if="${role.systemRole}" class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-700">system</span>
+    </div>
+    <p class="text-sm text-slate-600 mt-1" th:text="${role.description}">desc</p>
+  </div>
+
+  <div class="mt-6 bg-white rounded-lg shadow">
+    <div class="p-4 border-b border-slate-200">
+      <h3 class="text-sm font-semibold text-slate-700">Granted permissions</h3>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-slate-100 text-slate-600 text-left text-xs uppercase">
+        <tr>
+          <th class="px-4 py-3">Code</th>
+          <th class="px-4 py-3">Description</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        <tr th:each="rp : ${permissions}">
+          <td class="px-4 py-3 font-mono text-xs text-slate-700" th:text="${rp.permission.code}">CODE</td>
+          <td class="px-4 py-3 text-slate-600" th:text="${rp.permission.description}">desc</td>
+        </tr>
+        <tr th:if="${#lists.isEmpty(permissions)}">
+          <td colspan="2" class="px-4 py-8 text-center text-slate-500">No permissions granted.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

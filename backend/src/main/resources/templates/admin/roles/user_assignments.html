@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<div id="roles-panel" class="space-y-4">
+
+  <div>
+    <h3 class="text-xs uppercase text-slate-500 mb-2">Assigned roles</h3>
+    <div th:if="${#lists.isEmpty(assignments)}" class="text-sm text-slate-500 italic">
+      No roles assigned.
+    </div>
+    <ul th:unless="${#lists.isEmpty(assignments)}" class="flex flex-wrap gap-2">
+      <li th:each="ur : ${assignments}"
+          class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm">
+        <span class="font-medium" th:text="${ur.role.code}">CODE</span>
+        <button
+            th:hx-post="@{'/admin/roles/user/' + ${userId} + '/revoke/' + ${ur.role.id}}"
+            hx-target="#roles-panel"
+            hx-swap="outerHTML"
+            th:hx-get="@{'/admin/roles/user/' + ${userId}}"
+            hx-trigger="click"
+            class="text-red-600 hover:text-red-800 text-xs"
+            title="Revoke">
+          ×
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="border-t border-slate-200 pt-4">
+    <h3 class="text-xs uppercase text-slate-500 mb-2">Assign a role</h3>
+    <form
+        th:hx-post="@{'/admin/roles/user/' + ${userId} + '/assign'}"
+        hx-include="this"
+        hx-target="#roles-panel"
+        hx-swap="outerHTML"
+        class="flex gap-2">
+      <select name="roleId"
+              class="flex-1 px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-slate-500">
+        <option th:each="r : ${allRoles}"
+                th:value="${r.id}"
+                th:text="${r.code + ' · ' + r.name}">SUPER_ADMIN · Super admin</option>
+      </select>
+      <button type="submit"
+              class="px-4 py-2 bg-slate-900 text-white text-sm rounded hover:bg-slate-800">
+        Assign
+      </button>
+    </form>
+  </div>
+
+</div>
+
+</body>
+</html>

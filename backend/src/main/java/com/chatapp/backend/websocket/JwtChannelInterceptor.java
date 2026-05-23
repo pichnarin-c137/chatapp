@@ -1,8 +1,9 @@
 package com.chatapp.backend.websocket;
 
 import com.chatapp.backend.common.security.JwtService;
-import com.chatapp.backend.user.User;
-import com.chatapp.backend.user.UserRepository;
+import com.chatapp.backend.rbac.repository.UserRoleRepository;
+import com.chatapp.backend.user.entity.User;
+import com.chatapp.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
@@ -26,6 +27,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -46,9 +48,18 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             }
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new MessagingException("Unknown user"));
-            var authToken = new UsernamePasswordAuthenticationToken(
-                    user, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))
-            );
+            List<SimpleGrantedAuthority> authorities = userRoleRepository
+                    .findPermissionCodesByUserId(user.getId()).stream()
+                    .map(SimpleGrantedAuthority::new)
+                    .toList();
+            // Override getName() so Spring's user-destination resolver
+            // (convertAndSendToUser) can address frames by user id.
+            var authToken = new UsernamePasswordAuthenticationToken(user, null, authorities) {
+                @Override
+                public String getName() {
+                    return user.getId().toString();
+                }
+            };
             accessor.setUser(authToken);
             log.debug("STOMP CONNECT authenticated for user {}", user.getUsername());
         }

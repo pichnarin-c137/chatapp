@@ -1,22 +1,31 @@
 <script setup lang="ts">
-import { LOBBY_ID } from '~/composables/useChat'
+import { LOBBY_ID } from '~/types/conversation'
 
 definePageMeta({ middleware: ['auth'], layout: 'chat' })
 
 const authStore = useAuthStore()
-const chatStore = useChatStore()
-const { send, loadHistory, subscribeRoom } = useChat()
+const convStore = useConversationStore()
+const { loadHistory, subscribeConversation } = useConversation()
+const { send, markSeen } = useChat()
 
-const messages = computed(() => chatStore.messagesFor(LOBBY_ID))
+const messages = computed(() => convStore.messagesFor(LOBBY_ID))
 const tz = computed(() => authStore.timezone)
-const canSend = computed(() => chatStore.connection === 'connected')
+const canSend = computed(() => convStore.connection === 'connected')
+
+function markLatestSeen() {
+  const last = messages.value[messages.value.length - 1]
+  if (last && !last.id.startsWith('temp-')) markSeen(LOBBY_ID, last.id)
+}
 
 onMounted(async () => {
-  subscribeRoom(LOBBY_ID)
+  subscribeConversation(LOBBY_ID)
   if (messages.value.length === 0) {
     await loadHistory(LOBBY_ID).catch(() => {})
   }
+  markLatestSeen()
 })
+
+watch(() => messages.value.length, markLatestSeen)
 
 function onSend(content: string) {
   send(LOBBY_ID, content)
@@ -25,8 +34,9 @@ function onSend(content: string) {
 
 <template>
   <ChatPane
+    :conversation-id="LOBBY_ID"
     title="Lobby"
-    subtitle="Public room · everyone is here"
+    subtitle="Public channel · everyone is here"
     avatar="#"
     :messages="messages"
     :current-user-id="authStore.user?.id"
